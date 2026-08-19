@@ -26,4 +26,4 @@ STRICTNESS_SCALE = {"low": 1.4, "medium": 1.0, "high": 0.7}
 DEFAULT_WARN_AFTER_SEC = 5.0    # level 1: 팝업 경고
 DEFAULT_ALARM_AFTER_SEC = 15.0  # level 2: 강한 경고(개지랄 모드)
 
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")

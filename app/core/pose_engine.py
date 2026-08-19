@@ -74,20 +74,7 @@ def decode_image(image_b64: str) -> np.ndarray:
     return img
 
 
-def detect_landmarks(image_bgr: np.ndarray):
-    """BGR 이미지에서 포즈 랜드마크 검출.
-
-    Returns:
-        list[dict] | None — 33개 랜드마크 [{x, y, z, visibility}] (정규화 좌표),
-        사람이 감지되지 않으면 None.
-    """
-    rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-    with _lock:
-        result = _get_landmarker().detect(mp_image)
-    if not result.pose_landmarks:
-        return None
-    lms = result.pose_landmarks[0]
+def _to_dicts(lms):
     return [
         {
             "x": float(lm.x),
@@ -97,6 +84,37 @@ def detect_landmarks(image_bgr: np.ndarray):
         }
         for lm in lms
     ]
+
+
+def detect_landmarks(image_bgr: np.ndarray):
+    """BGR 이미지에서 포즈 랜드마크 검출.
+
+    Returns:
+        list[dict] | None — 33개 랜드마크 [{x, y, z, visibility}] (정규화 좌표),
+        사람이 감지되지 않으면 None.
+    """
+    full = detect_landmarks_full(image_bgr)
+    return full["image"] if full else None
+
+
+def detect_landmarks_full(image_bgr: np.ndarray):
+    """이미지 좌표 랜드마크 + 월드(3D, 미터, 힙 원점) 랜드마크를 함께 반환.
+
+    Returns:
+        {"image": [...33...], "world": [...33...]} | None
+        world는 힙 중심 원점의 카메라 방향 3D 좌표 — 뷰 불변 자세 특징
+        계산(교차 뷰 캘리브레이션 검증)에 쓴다.
+    """
+    rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+    with _lock:
+        result = _get_landmarker().detect(mp_image)
+    if not result.pose_landmarks:
+        return None
+    return {
+        "image": _to_dicts(result.pose_landmarks[0]),
+        "world": _to_dicts(result.pose_world_landmarks[0]),
+    }
 
 
 def landmarks_from_image_b64(image_b64: str):

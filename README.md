@@ -195,7 +195,8 @@ ws.onmessage = (e) => { const r = JSON.parse(e.data); if (r.alert_level >= 1) sh
 ## 4. 자세 진단 리포트 분석
 
 ### `POST /api/report/daily/analyze`
-backend가 집계한 일일 데이터를 보내면 아바타 말투의 분석을 돌려줌.
+backend가 집계한 일일 데이터를 보내면 담백한 서술체 분석을 돌려줌.
+(아바타 말투·`avatar_state` 생성은 기획 보류로 코드에 주석처리돼 있음 — 확정되면 복원)
 
 ```json
 {
@@ -212,16 +213,17 @@ backend가 집계한 일일 데이터를 보내면 아바타 말투의 분석을
 
 ```json
 {
-  "summary": "오늘 바른 자세 유지율이 74%로 꽤 잘 지켰어요. ...",   // 2~3문장, 아바타 말투
+  "summary": "바른 자세 유지율은 74%로 양호한 수준입니다. ...",      // 2~3문장, 담백한 서술체
   "grade": "excellent" | "good" | "normal" | "bad",
-  "highlights": ["10시에 유지율이 60%로 가장 낮았어요", ...],        // 최대 4개
-  "advice": ["50분마다 한 번씩 스트레칭 알림에 따라 몸을 풀어 주세요", ...],  // 최대 3개
-  "avatar_state": "proud" | "happy" | "neutral" | "worried" | "slouching",  // 아바타 표정/자세
+  "highlights": ["10시 유지율이 60%로 가장 낮았습니다", ...],        // 최대 4개
+  "advice": ["50분마다 한 번씩 스트레칭으로 몸을 푸는 것을 권장합니다", ...],  // 최대 3개
   "source": "llm" | "rule_based",   // ANTHROPIC_API_KEY 없거나 호출 실패 시 rule_based
   "stats": {"total_monitored_min": 115, "avg_good_ratio": 0.74, "total_alerts": 6,
             "worst_hour": {...}, "best_hour": {...}, "stretch_done": 1, "stretch_suggested": 3}
 }
 ```
+
+LLM 분석 모델은 `claude-sonnet-5` (환경변수 `ANTHROPIC_MODEL`로 변경 가능).
 
 ---
 
@@ -270,6 +272,10 @@ app/
     posture.py         자세 지표 계산 · baseline 대비 판정 · 경고 상태머신
     stretch.py         스트레칭 카탈로그 · 추천 · 동작 감지 규칙
     report.py          일일 리포트 분석 (Claude, 규칙 기반 폴백)
+    view_invariant.py  월드 랜드마크(3D) 기반 뷰 불변 자세 특징 (2장 캘리브레이션 실험용)
 models/
   pose_landmarker_lite.task   MediaPipe pose 모델
+experiments/
+  two_shot_test.py            2장 촬영(정면+자유 배치) 캘리브레이션 실험 + 팀원용 CLI
+  two-shot-calibration.md     실험 결과와 기존 방식 대비 트레이드오프 (결정용 문서)
 ```

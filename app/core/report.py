@@ -1,8 +1,11 @@
 """일일 자세 리포트 분석.
 
-Claude API(모델: claude-opus-5)로 시간대별 자세 데이터를 해석해
-요약·하이라이트·조언·아바타 상태를 만든다. API 키가 없거나 호출이
-실패하면 규칙 기반 분석으로 폴백해서 데모가 항상 동작하게 한다.
+Claude API(기본 모델: claude-sonnet-5)로 시간대별 자세 데이터를 해석해
+요약·하이라이트·조언을 만든다. API 키가 없거나 호출이 실패하면
+규칙 기반 분석으로 폴백해서 데모가 항상 동작하게 한다.
+
+아바타 말투·아바타 상태 생성은 기획 보류로 주석처리해 둠 —
+확정되면 avatar_state 관련 주석을 해제하면 된다.
 """
 
 import json
@@ -15,7 +18,7 @@ logger = logging.getLogger(__name__)
 _REPORT_SCHEMA = {
     "type": "object",
     "properties": {
-        "summary": {"type": "string", "description": "오늘 하루 자세에 대한 2~3문장 요약 (한국어, 아바타가 말하듯 친근한 말투)"},
+        "summary": {"type": "string", "description": "오늘 하루 자세 데이터 요약 (한국어, 2~3문장, 담백한 서술체)"},
         "grade": {"type": "string", "enum": ["excellent", "good", "normal", "bad"]},
         "highlights": {
             "type": "array",
@@ -27,13 +30,14 @@ _REPORT_SCHEMA = {
             "items": {"type": "string"},
             "description": "내일을 위한 구체적인 조언 (한국어, 최대 3개)",
         },
-        "avatar_state": {
-            "type": "string",
-            "enum": ["proud", "happy", "neutral", "worried", "slouching"],
-            "description": "리포트와 함께 보여줄 아바타 상태",
-        },
+        # 아바타 상태 생성 — 기획 보류로 주석처리
+        # "avatar_state": {
+        #     "type": "string",
+        #     "enum": ["proud", "happy", "neutral", "worried", "slouching"],
+        #     "description": "리포트와 함께 보여줄 아바타 상태",
+        # },
     },
-    "required": ["summary", "grade", "highlights", "advice", "avatar_state"],
+    "required": ["summary", "grade", "highlights", "advice"],
     "additionalProperties": False,
 }
 
@@ -66,46 +70,46 @@ def _fallback_analysis(daily: dict) -> dict:
     r = s["avg_good_ratio"]
     if s["total_monitored_min"] == 0:
         return {
-            "summary": "오늘은 모니터링 기록이 없어요. 내일은 함께 바른 자세에 도전해 봐요!",
+            "summary": "오늘은 모니터링 기록이 없습니다.",
             "grade": "normal",
             "highlights": [],
-            "advice": ["모니터링을 켜 두면 자세 습관을 추적해 드릴 수 있어요"],
-            "avatar_state": "neutral",
+            "advice": ["모니터링을 켜 두면 자세 습관을 추적할 수 있습니다"],
+            # "avatar_state": "neutral",  # 아바타 상태 — 기획 보류
         }
     if r >= 0.85:
-        grade, state = "excellent", "proud"
-        summary = f"오늘 바른 자세 유지율이 {round(r*100)}%로 아주 훌륭했어요! 이 감각을 기억해 주세요."
+        grade = "excellent"
+        summary = f"오늘 바른 자세 유지율은 {round(r*100)}%로 매우 높았습니다."
     elif r >= 0.7:
-        grade, state = "good", "happy"
-        summary = f"바른 자세 유지율 {round(r*100)}%, 꽤 잘 지켰어요. 조금만 더 신경 쓰면 완벽해요."
+        grade = "good"
+        summary = f"바른 자세 유지율은 {round(r*100)}%로 양호한 수준입니다."
     elif r >= 0.5:
-        grade, state = "normal", "worried"
-        summary = f"바른 자세 유지율이 {round(r*100)}%였어요. 자세가 무너지는 시간대가 보여요."
+        grade = "normal"
+        summary = f"바른 자세 유지율은 {round(r*100)}%였습니다. 자세가 무너지는 시간대가 있습니다."
     else:
-        grade, state = "bad", "slouching"
-        summary = f"오늘은 바른 자세 유지율이 {round(r*100)}%에 그쳤어요. 허리와 목이 걱정돼요."
+        grade = "bad"
+        summary = f"바른 자세 유지율이 {round(r*100)}%로 낮은 편입니다."
     highlights = []
     if s["worst_hour"]:
         highlights.append(
-            f"{s['worst_hour']['hour']}시에 유지율이 {round(s['worst_hour']['good_ratio']*100)}%로 가장 낮았어요"
+            f"{s['worst_hour']['hour']}시 유지율이 {round(s['worst_hour']['good_ratio']*100)}%로 가장 낮았습니다"
         )
     if s["best_hour"]:
         highlights.append(
-            f"{s['best_hour']['hour']}시가 {round(s['best_hour']['good_ratio']*100)}%로 가장 좋았어요"
+            f"{s['best_hour']['hour']}시 유지율이 {round(s['best_hour']['good_ratio']*100)}%로 가장 높았습니다"
         )
     if s["total_alerts"]:
-        highlights.append(f"자세 경고가 총 {s['total_alerts']}회 울렸어요")
-    advice = ["50분마다 한 번씩 스트레칭 알림에 따라 몸을 풀어 주세요"]
+        highlights.append(f"자세 경고가 총 {s['total_alerts']}회 발생했습니다")
+    advice = ["50분마다 한 번씩 스트레칭으로 몸을 푸는 것을 권장합니다"]
     if s["stretch_suggested"] and s["stretch_done"] < s["stretch_suggested"]:
         advice.append(
-            f"제안된 스트레칭 {s['stretch_suggested']}회 중 {s['stretch_done']}회만 했어요. 내일은 다 채워 봐요"
+            f"제안된 스트레칭 {s['stretch_suggested']}회 중 {s['stretch_done']}회를 수행했습니다"
         )
     return {
         "summary": summary,
         "grade": grade,
         "highlights": highlights[:4],
         "advice": advice[:3],
-        "avatar_state": state,
+        # "avatar_state": state,  # 아바타 상태 — 기획 보류
     }
 
 
@@ -131,18 +135,19 @@ def _llm_analysis(daily: dict, stats: dict):
         payload = {"daily_report": daily, "computed_stats": stats}
         response = client.messages.create(
             model=ANTHROPIC_MODEL,
-            # opus-5는 기본으로 사고(thinking)가 켜져 있고 max_tokens에
-            # 사고 토큰까지 포함되므로 JSON이 잘리지 않게 여유를 둔다
+            # 사고(thinking) 토큰도 max_tokens에 포함되므로 JSON이 잘리지 않게 여유를 둔다
             max_tokens=8192,
             output_config={
                 "effort": "low",  # 짧은 요약 작업 — 지연시간 우선
                 "format": {"type": "json_schema", "schema": _REPORT_SCHEMA},
             },
             system=(
-                "당신은 자세 교정 서비스의 아바타 캐릭터로서 사용자의 일일 자세 데이터를 분석합니다. "
+                "당신은 자세 교정 서비스의 데이터 분석가로서 사용자의 일일 자세 데이터를 분석합니다. "
                 "hourly는 시간대별 바른 자세 유지율(good_ratio 0~1), 모니터링 시간(분), 경고 횟수입니다. "
-                "짚을만한 추이와 주목할 데이터를 근거 숫자와 함께 해석하고, 친근하되 과장 없이 말하세요. "
-                "모든 출력은 한국어로 작성합니다."
+                "짚을만한 추이와 주목할 데이터를 근거 숫자와 함께 담백하고 사실 위주로 서술하세요. "
+                "과장·감탄·이모지 없이 평서문으로, 모든 출력은 한국어로 작성합니다."
+                # 아바타 말투 버전(기획 보류): "당신은 자세 교정 서비스의 아바타 캐릭터로서 ... "
+                # "친근하되 과장 없이 말하세요."
             ),
             messages=[{
                 "role": "user",
