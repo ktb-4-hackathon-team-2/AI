@@ -57,4 +57,8 @@ class DailyReportRequest(BaseModel):
     hourly: List[HourlyBucket]
     stretch_suggested: int = 0
     stretch_done: int = 0
-    user_name: Optional[str] = Field(None, description="아바타가 부를 이름 (선택)")
+    user_id: Optional[str] = Field(
+        None,
+        description="LLM 쿨다운 구분용 유저 id (권장 — 없으면 전체 공유 키로 쿨다운)",
+    )
+    user_name: Optional[str] = Field(None, description="아바타가 부를 이름 (선택, 기획 보류)")

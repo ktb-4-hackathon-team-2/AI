@@ -198,6 +198,14 @@ ws.onmessage = (e) => { const r = JSON.parse(e.data); if (r.alert_level >= 1) sh
 backend가 집계한 일일 데이터를 보내면 담백한 서술체 분석을 돌려줌.
 (아바타 말투·`avatar_state` 생성은 기획 보류로 코드에 주석처리돼 있음 — 확정되면 복원)
 
+**호출 시점**: 모니터링 종료 버튼을 누를 때 backend가 그날 데이터를 집계해 호출.
+
+**연타 보호 (LLM 쿨다운)**: 같은 `(user_id, date)`로 **5분 안에** 다시 호출하면
+LLM API를 다시 부르지 않고 **기존 코멘트를 재사용**함 (`analysis_cached: true`).
+단, **`stats`(일일 레포트 수치)는 매 호출 새로 계산**되므로 일일 레포트 갱신은 연타해도 됨.
+쿨다운은 `REPORT_LLM_COOLDOWN_SEC` 환경변수로 조정 (기본 300초).
+`user_id`를 안 보내면 전체 공유 키로 쿨다운이 걸리니 **user_id 전송 권장**.
+
 ```json
 {
   "date": "2026-08-19",
@@ -207,7 +215,7 @@ backend가 집계한 일일 데이터를 보내면 담백한 서술체 분석을
   ],
   "stretch_suggested": 3,
   "stretch_done": 1,
-  "user_name": "지미"        // 선택
+  "user_id": "user-42"       // 쿨다운 구분용 (권장)
 }
 ```
 
@@ -219,7 +227,10 @@ backend가 집계한 일일 데이터를 보내면 담백한 서술체 분석을
   "advice": ["50분마다 한 번씩 스트레칭으로 몸을 푸는 것을 권장합니다", ...],  // 최대 3개
   "source": "llm" | "rule_based",   // ANTHROPIC_API_KEY 없거나 호출 실패 시 rule_based
   "stats": {"total_monitored_min": 115, "avg_good_ratio": 0.74, "total_alerts": 6,
-            "worst_hour": {...}, "best_hour": {...}, "stretch_done": 1, "stretch_suggested": 3}
+            "worst_hour": {...}, "best_hour": {...}, "stretch_done": 1, "stretch_suggested": 3},
+  "analysis_cached": false,           // true면 쿨다운으로 기존 코멘트 재사용 (stats는 최신)
+  "analysis_age_sec": 0.0,            // 재사용한 코멘트가 만들어진 지 몇 초 됐는지
+  "cooldown_remaining_sec": 300.0     // 다음 LLM 갱신까지 남은 시간 — UI에 "N분 후 갱신" 표시용
 }
 ```
 

@@ -10,10 +10,25 @@ Claude API(기본 모델: claude-sonnet-5)로 시간대별 자세 데이터를 �
 
 import json
 import logging
+import threading
+import time
 
-from app.config import ANTHROPIC_MODEL
+from app.config import ANTHROPIC_MODEL, REPORT_LLM_COOLDOWN_SEC
 
 logger = logging.getLogger(__name__)
+
+# (user_id:date)별 LLM 분석 캐시 — 종료 버튼 연타 시 쿨다운 동안 재사용.
+# 항목 수는 유저×날짜 수준이라 인메모리로 충분하다.
+_analysis_cache = {}
+_cache_guard = threading.Lock()
+_key_locks = {}
+
+
+def _lock_for(key: str) -> threading.Lock:
+    with _cache_guard:
+        if key not in _key_locks:
+            _key_locks[key] = threading.Lock()
+        return _key_locks[key]
 
 _REPORT_SCHEMA = {
     "type": "object",
@@ -113,17 +128,58 @@ def _fallback_analysis(daily: dict) -> dict:
     }
 
 
-def analyze_daily(daily: dict) -> dict:
-    """일일 리포트 데이터 → 분석 결과. LLM 우선, 실패 시 규칙 기반."""
+def analyze_daily(daily: dict, cache_key: str = None, cooldown_sec: float = None) -> dict:
+    """일일 리포트 데이터 → 분석 결과. LLM 우선, 실패 시 규칙 기반.
+
+    cache_key를 주면 분석 코멘트에 쿨다운이 걸린다: 마지막 분석 후
+    cooldown_sec(기본 5분) 안의 재호출은 LLM을 다시 부르지 않고 기존
+    코멘트를 재사용한다. **stats는 항상 새로 계산**하므로 일일 레포트
+    수치는 연타해도 갱신된다.
+
+    응답 메타: analysis_cached(재사용 여부), analysis_age_sec,
+    cooldown_remaining_sec(다음 LLM 갱신까지 남은 시간).
+    """
     stats = _stats(daily)
-    result = _llm_analysis(daily, stats)
-    if result is None:
-        result = _fallback_analysis(daily)
-        result["source"] = "rule_based"
-    else:
-        result["source"] = "llm"
-    result["stats"] = stats
-    return result
+    cooldown = REPORT_LLM_COOLDOWN_SEC if cooldown_sec is None else cooldown_sec
+
+    def _fresh() -> dict:
+        result = _llm_analysis(daily, stats)
+        if result is None:
+            result = _fallback_analysis(daily)
+            result["source"] = "rule_based"
+        else:
+            result["source"] = "llm"
+        return result
+
+    if cache_key is None:
+        result = _fresh()
+        result["stats"] = stats
+        result["analysis_cached"] = False
+        result["analysis_age_sec"] = 0.0
+        result["cooldown_remaining_sec"] = 0.0
+        return result
+
+    # 키별 락으로 동시 연타를 직렬화 → 쿨다운 안에서 LLM은 최대 1회
+    with _lock_for(cache_key):
+        now = time.time()
+        entry = _analysis_cache.get(cache_key)
+        if entry is not None and now - entry["at"] < cooldown:
+            age = now - entry["at"]
+            result = dict(entry["analysis"])
+            result["stats"] = stats  # 통계는 항상 최신
+            result["analysis_cached"] = True
+            result["analysis_age_sec"] = round(age, 1)
+            result["cooldown_remaining_sec"] = round(cooldown - age, 1)
+            return result
+
+        result = _fresh()
+        # 실패(rule_based 폴백)도 쿨다운을 시작한다 — 목적이 API 남용 방지이므로
+        _analysis_cache[cache_key] = {"analysis": dict(result), "at": now}
+        result["stats"] = stats
+        result["analysis_cached"] = False
+        result["analysis_age_sec"] = 0.0
+        result["cooldown_remaining_sec"] = round(cooldown, 1)
+        return result
 
 
 def _llm_analysis(daily: dict, stats: dict):
