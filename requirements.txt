@@ -1,0 +1,9 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+mediapipe>=0.10.9,<1.0  # 1.x는 macOS Metal 초기화 크래시 (Tasks API 그대로 사용 가능)
+opencv-python>=4.9
+numpy>=1.24
+pydantic>=2.6
+anthropic>=0.122  # output_config(structured outputs)가 있는 버전
+python-multipart>=0.0.9
+websockets>=12.0
