@@ -16,11 +16,13 @@
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+export ANTHROPIC_API_KEY="sk-ant-..."   # 리포트 LLM 분석용 (없어도 규칙 기반 폴백으로 동작)
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 - Swagger 문서: `http://localhost:8000/docs`
-- 리포트 LLM 분석을 쓰려면 `ANTHROPIC_API_KEY` 환경변수 설정 (없어도 규칙 기반 폴백으로 동작)
+- 리포트 LLM 분석을 쓰려면 `ANTHROPIC_API_KEY` 환경변수 설정이 필요함 (없어도 규칙 기반 폴백으로 동작). `anthropic.Anthropic()` 클라이언트가 이 환경변수를 자동으로 읽음 ([app/core/report.py](app/core/report.py))
 - baseline은 `data/baselines.json`에 저장됨 (git 제외)
 
 ## 공통 규칙
