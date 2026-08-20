@@ -237,8 +237,9 @@ def _llm_analysis(daily: dict, stats: dict):
             model=ANTHROPIC_MODEL,
             # 사고(thinking) 토큰도 max_tokens에 포함되므로 JSON이 잘리지 않게 여유를 둔다
             max_tokens=8192,
+            # effort는 넣지 않는다 — Haiku 4.5에서 지원되지 않아 400이 나고,
+            # 그러면 조용히 규칙 기반 폴백으로 떨어진다 (모델 교체 자유도 확보)
             output_config={
-                "effort": "low",  # 짧은 요약 작업 — 지연시간 우선
                 "format": {"type": "json_schema", "schema": _REPORT_SCHEMA},
             },
             system=(
