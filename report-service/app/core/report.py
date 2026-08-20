@@ -130,13 +130,17 @@ def _fallback_analysis(daily: dict) -> dict:
     }
 
 
-def analyze_daily(daily: dict, cache_key: str = None, cooldown_sec: float = None) -> dict:
+def analyze_daily(daily: dict, cache_key: str = None, cooldown_sec: float = None, force: bool = False) -> dict:
     """일일 리포트 데이터 → 분석 결과. LLM 우선, 실패 시 규칙 기반.
 
     cache_key를 주면 분석 코멘트에 쿨다운이 걸린다: 마지막 분석 후
     cooldown_sec(기본 5분) 안의 재호출은 LLM을 다시 부르지 않고 기존
     코멘트를 재사용한다. **stats는 항상 새로 계산**하므로 일일 레포트
     수치는 연타해도 갱신된다.
+
+    force=True면 쿨다운을 건너뛰고 항상 새로 분석한다 — 사용자가 리포트에서
+    '재생성'을 명시적으로 누른 경우다. 쿨다운의 목적은 자동 호출(종료 버튼 연타)의
+    과다 청구 방지이므로, 사람이 직접 요청한 갱신까지 막을 이유는 없다.
 
     응답 메타: analysis_cached(재사용 여부), analysis_age_sec,
     cooldown_remaining_sec(다음 LLM 갱신까지 남은 시간).
@@ -179,7 +183,7 @@ def analyze_daily(daily: dict, cache_key: str = None, cooldown_sec: float = None
     try:
         now = time.time()
         entry = _analysis_cache.get(cache_key)
-        if entry is not None and now - entry["at"] < cooldown:
+        if not force and entry is not None and now - entry["at"] < cooldown:
             age = now - entry["at"]
             result = dict(entry["analysis"])
             result["stats"] = stats  # 통계는 항상 최신

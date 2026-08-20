@@ -66,9 +66,12 @@ def analyze_daily(req: Dict[str, Any] = Body(default_factory=dict)):
         "user_name": req.get("user_name"),
     }
 
+    # force=true면 쿨다운을 건너뛴다 — 사용자가 '재생성'을 직접 누른 경우
+    force = bool(req.get("force"))
     print(
         f"[report] 분석 요청: user={user_id}, date={date_str}, hourly {len(cleaned_hourly)}건, "
-        f"스트레칭 {cleaned_payload['stretch_done']}/{cleaned_payload['stretch_suggested']}회",
+        f"스트레칭 {cleaned_payload['stretch_done']}/{cleaned_payload['stretch_suggested']}회"
+        f"{' (force)' if force else ''}",
         flush=True,
     )
-    return report.analyze_daily(cleaned_payload, cache_key=f"{user_id}:{date_str}")
+    return report.analyze_daily(cleaned_payload, cache_key=f"{user_id}:{date_str}", force=force)
