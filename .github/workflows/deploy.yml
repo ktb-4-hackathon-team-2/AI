@@ -28,6 +28,13 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Get ECR Password for EC2 Login
+        id: ecr-token
+        run: |
+          TOKEN=$(aws ecr get-login-password --region ${{ secrets.AWS_REGION || 'ap-northeast-2' }})
+          echo "::add-mask::$TOKEN"
+          echo "token=$TOKEN" >> $GITHUB_OUTPUT
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -49,15 +56,15 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_AI_REPOSITORY || 'bandeut-ai' }}
-          AWS_REGION: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
+          ECR_PASSWORD: ${{ steps.ecr-token.outputs.token }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER || 'ubuntu' }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          envs: ECR_REGISTRY,ECR_REPOSITORY,AWS_REGION
+          envs: ECR_REGISTRY,ECR_REPOSITORY,ECR_PASSWORD
           script: |
             echo "🚀 [1/5] AWS ECR 로그인..."
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+            echo "$ECR_PASSWORD" | docker login --username AWS --password-stdin $ECR_REGISTRY
 
             echo "📦 [2/5] 최신 AI 서버 이미지 Pull..."
             docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
