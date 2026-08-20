@@ -66,5 +66,9 @@ def analyze_daily(req: Dict[str, Any] = Body(default_factory=dict)):
         "user_name": req.get("user_name"),
     }
 
-    print(f"[report] 분석 요청: user={user_id}, date={date_str}, hourly {len(cleaned_hourly)}건", flush=True)
+    print(
+        f"[report] 분석 요청: user={user_id}, date={date_str}, hourly {len(cleaned_hourly)}건, "
+        f"스트레칭 {cleaned_payload['stretch_done']}/{cleaned_payload['stretch_suggested']}회",
+        flush=True,
+    )
     return report.analyze_daily(cleaned_payload, cache_key=f"{user_id}:{date_str}")
