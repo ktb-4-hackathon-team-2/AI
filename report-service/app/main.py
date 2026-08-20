@@ -1,7 +1,7 @@
 """반듯 AI 리포트 서버 — 일일 자세 리포트 분석(Claude) 단독 FastAPI 엔트리포인트.
 
 자세 감지(MediaPipe)는 프론트엔드로 이관되어 이 서버에는 없다.
-전체 기능이 있던 원본은 저장소 루트의 app/ 참고 (백업).
+전체 기능이 있던 원본은 저장소의 backup/app/ 참고.
 
 실행:
     uvicorn app.main:app --host 0.0.0.0 --port 8000

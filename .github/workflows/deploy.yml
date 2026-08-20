@@ -38,7 +38,7 @@ jobs:
           ECR_REPOSITORY: ${{ secrets.ECR_AI_REPOSITORY || 'bandeut-ai' }}
           IMAGE_TAG: ${{ github.sha }}
         with:
-          context: .
+          context: ./report-service
           push: true
           tags: |
             ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
@@ -76,7 +76,7 @@ jobs:
               --restart always \
               -p 8000:8000 \
               -e ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}" \
-              -e REPORT_MODEL="${{ secrets.REPORT_MODEL || 'claude-3-7-sonnet-20250219' }}" \
+              -e ANTHROPIC_MODEL="${{ secrets.ANTHROPIC_MODEL || 'claude-sonnet-5' }}" \
               $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
             echo "🏥 [5/5] 헬스체크 검증 시작 (최대 60초 대기)..."

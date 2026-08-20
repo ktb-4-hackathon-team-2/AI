@@ -3,9 +3,11 @@ name: AI Server CI
 on:
   pull_request:
     branches:
+      - main
       - test
   push:
     branches:
+      - main
       - test
 
 jobs:
@@ -23,26 +25,22 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install system dependencies for OpenCV & MediaPipe
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 libgles2 libegl1
-
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r report-service/requirements.txt
           pip install flake8 pytest
 
       - name: Syntax & Lint check
         run: |
           # Stop the build if there are Python syntax errors or undefined names
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 report-service --count --select=E9,F63,F7,F82 --show-source --statistics
           # Python syntax compilation test
-          python -m compileall app
+          python -m compileall report-service/app
 
       - name: Run Unit Tests
         run: |
+          cd report-service
           python test_report.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || 'mock-key-for-ci' }}
