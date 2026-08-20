@@ -69,8 +69,13 @@ jobs:
             echo "📦 [2/5] 최신 AI 서버 이미지 Pull..."
             docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-            echo "💾 [3/5] 현재 실행 중인 AI 컨테이너 백업 보존..."
+            echo "💾 [3/5] 현재 실행 중인 AI 컨테이너 및 롤백용 이미지 보존..."
             if [ "$(docker ps -q -f name=posture-ai)" ]; then
+              CURRENT_IMAGE_ID=$(docker inspect --format='{{.Image}}' posture-ai || true)
+              if [ -n "$CURRENT_IMAGE_ID" ]; then
+                docker tag $CURRENT_IMAGE_ID bandeut-ai:rollback || true
+                echo "🏷️ 직전 정상 AI 이미지를 bandeut-ai:rollback 태그로 보존 완료"
+              fi
               docker stop posture-ai || true
               docker rename posture-ai posture-ai-backup || true
             elif [ "$(docker ps -a -q -f name=posture-ai)" ]; then
@@ -114,6 +119,8 @@ jobs:
               exit 1
             fi
 
-            echo "🎉 배포 완료! 백업 컨테이너 정리..."
+            echo "🎉 배포 완료! 백업 컨테이너 정리 및 미사용 도커 이미지 삭제..."
             docker rm -f posture-ai-backup 2>/dev/null || true
             docker image prune -f
+            docker builder prune -f || true
+            echo "🧹 AI 도커 미사용 이미지 및 빌드 캐시 청소 완료!"
