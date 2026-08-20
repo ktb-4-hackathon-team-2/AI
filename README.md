@@ -13,11 +13,11 @@
 | [`backup/`](backup/) | 원본 풀서버 백업 — 자세 감지(가이드 정합·캘리브레이션·모니터링·스트레칭) + 리포트 분석이 함께 있던 코드. API 문서는 [`backup/README.md`](backup/README.md) (프론트 포팅의 원본 스펙) |
 | `.github/workflows/` | CI(`test` 브랜치) + 수동 배포(ECR→EC2) |
 
-## ⚠️ CI/CD 경로 수정 필요
+## CI/CD
 
-워크플로우가 아직 저장소 루트(옛 풀서버) 기준이라 다음 수정이 필요하다:
+둘 다 `report-service/` 기준으로 동작한다.
 
-- `deploy.yml`: 도커 빌드 `context: .` → `context: ./report-service`
-- `ci.yml`: `pip install -r report-service/requirements.txt`,
-  `python -m compileall report-service/app`, `cd report-service && python test_report.py`
-  (OpenCV/MediaPipe 시스템 패키지 설치 스텝은 삭제 가능)
+- **CI** (`ci.yml`): `main`/`test` 브랜치 push·PR 시 자동 실행 — 린트 + 문법 검사 + `test_report.py`
+- **배포** (`deploy.yml`): 자동 아님. GitHub **Actions 탭 → "Deploy AI Server to EC2" → Run workflow** 버튼으로 수동 실행
+  → report-service 이미지를 ECR에 빌드·푸시 → EC2에서 컨테이너 교체 → 헬스체크 실패 시 이전 버전 자동 롤백
+- 컨테이너 환경변수는 레포 시크릿에서 주입: `ANTHROPIC_API_KEY`(필수 — 없으면 규칙 기반 폴백), `ANTHROPIC_MODEL`(선택, 기본 `claude-sonnet-5`)
