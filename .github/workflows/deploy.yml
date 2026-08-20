@@ -1,0 +1,110 @@
+name: Deploy AI Server to EC2 (AWS ECR & Auto Rollback)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    name: Build ECR & Deploy with Auto Rollback
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image to Amazon ECR
+        uses: docker/build-push-action@v5
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_AI_REPOSITORY || 'bandeut-ai' }}
+          IMAGE_TAG: ${{ github.sha }}
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+
+      - name: Deploy to EC2 with Health Check & Auto Rollback
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_AI_REPOSITORY || 'bandeut-ai' }}
+          AWS_REGION: ${{ secrets.AWS_REGION || 'ap-northeast-2' }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER || 'ubuntu' }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: ECR_REGISTRY,ECR_REPOSITORY,AWS_REGION
+          script: |
+            echo "🚀 [1/5] AWS ECR 로그인..."
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+            echo "📦 [2/5] 최신 AI 서버 이미지 Pull..."
+            docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+            echo "💾 [3/5] 현재 실행 중인 AI 컨테이너 백업 보존..."
+            if [ "$(docker ps -q -f name=posture-ai)" ]; then
+              docker stop posture-ai || true
+              docker rename posture-ai posture-ai-backup || true
+            elif [ "$(docker ps -a -q -f name=posture-ai)" ]; then
+              docker rm -f posture-ai || true
+            fi
+
+            echo "▶️ [4/5] 새 AI 컨테이너 기동..."
+            docker run -d \
+              --name posture-ai \
+              --restart always \
+              -p 8000:8000 \
+              -e ANTHROPIC_API_KEY="${{ secrets.ANTHROPIC_API_KEY }}" \
+              -e REPORT_MODEL="${{ secrets.REPORT_MODEL || 'claude-3-7-sonnet-20250219' }}" \
+              $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+            echo "🏥 [5/5] 헬스체크 검증 시작 (최대 60초 대기)..."
+            SUCCESS=false
+            for i in {1..12}; do
+              STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/health || true)
+              if [ "$STATUS_CODE" -eq 200 ]; then
+                echo "✅ AI 서버 헬스체크 성공! (HTTP Status: $STATUS_CODE)"
+                SUCCESS=true
+                break
+              fi
+              echo "   - 대기 중... ($i/12, HTTP Code: $STATUS_CODE)"
+              sleep 5
+            done
+
+            if [ "$SUCCESS" = false ]; then
+              echo "🚨 [ROLLBACK] 헬스체크 실패! 이전 정상 AI 컨테이너로 자동 롤백을 수행합니다..."
+              docker stop posture-ai || true
+              docker rm -f posture-ai || true
+
+              if [ "$(docker ps -a -q -f name=posture-ai-backup)" ]; then
+                docker rename posture-ai-backup posture-ai || true
+                docker start posture-ai || true
+                echo "🔄 [ROLLBACK 완료] 이전 버전의 AI 서버가 복원되었습니다."
+              else
+                echo "⚠️ 이전 백업 컨테이너가 존재하지 않습니다."
+              fi
+              exit 1
+            fi
+
+            echo "🎉 배포 완료! 백업 컨테이너 정리..."
+            docker rm -f posture-ai-backup 2>/dev/null || true
+            docker image prune -f
