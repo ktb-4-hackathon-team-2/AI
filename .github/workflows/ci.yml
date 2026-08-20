@@ -3,11 +3,10 @@ name: AI Server CI
 on:
   pull_request:
     branches:
-      - main
-      - develop
+      - test
   push:
     branches:
-      - develop
+      - test
 
 jobs:
   test-and-lint:

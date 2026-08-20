@@ -1,10 +1,12 @@
-name: Deploy AI Server to EC2 (AWS ECR & Auto Rollback)
+name: Deploy AI Server to EC2 (Manual ECR & Auto Rollback)
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
+    inputs:
+      reason:
+        description: '배포 사유 (예: v1.0.0 릴리즈)'
+        required: false
+        default: 'Manual deployment triggered via GitHub UI'
 
 jobs:
   build-and-deploy:
