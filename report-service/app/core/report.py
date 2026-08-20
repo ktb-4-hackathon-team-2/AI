@@ -162,8 +162,21 @@ def analyze_daily(daily: dict, cache_key: str = None, cooldown_sec: float = None
         result["cooldown_remaining_sec"] = 0.0
         return result
 
-    # 키별 락으로 동시 연타를 직렬화 → 쿨다운 안에서 LLM은 최대 1회
-    with _lock_for(cache_key):
+    # 키별 락으로 동시 연타를 직렬화 → 쿨다운 안에서 LLM은 최대 1회.
+    # 단, 락 대기는 하지 않는다(blocking=False) — 같은 키의 LLM 호출(최대 60초)이
+    # 진행 중일 때 대기하면 동기 엔드포인트 특성상 요청마다 스레드풀 토큰을 쥔 채
+    # 잠들어, 동시 요청이 몰리면 서버 전체가 응답 불가가 된다.
+    # 이미 진행 중이면 즉시 규칙 기반으로 응답하고, LLM 결과는 다음 호출부터 재사용된다.
+    lock = _lock_for(cache_key)
+    if not lock.acquire(blocking=False):
+        result = _fallback_analysis(daily)
+        result["source"] = "rule_based"
+        result["stats"] = stats
+        result["analysis_cached"] = False
+        result["analysis_age_sec"] = 0.0
+        result["cooldown_remaining_sec"] = round(cooldown, 1)
+        return result
+    try:
         now = time.time()
         entry = _analysis_cache.get(cache_key)
         if entry is not None and now - entry["at"] < cooldown:
@@ -183,6 +196,8 @@ def analyze_daily(daily: dict, cache_key: str = None, cooldown_sec: float = None
         result["analysis_age_sec"] = 0.0
         result["cooldown_remaining_sec"] = round(cooldown, 1)
         return result
+    finally:
+        lock.release()
 
 
 def _llm_analysis(daily: dict, stats: dict):
